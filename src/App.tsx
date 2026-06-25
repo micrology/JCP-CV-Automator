@@ -6,6 +6,7 @@ import { ApplicationTable } from './components/ApplicationTable';
 import { TerminalConsole } from './components/TerminalConsole';
 import { StatusBar } from './components/StatusBar';
 import { ApplicationDetailModal } from './components/ApplicationDetailModal';
+import { dbGet, dbSet, dbClear } from './lib/db';
 
 // 80 Realistic UK candidate names for Job Centre Plus notifications
 const JCP_CANDIDATE_POOL = [
@@ -42,11 +43,62 @@ export default function App() {
     { timestamp: new Date().toLocaleTimeString(), step: 'SYSTEM', level: 'info', message: 'RecruitFlow JCP Automator v1.0.7 initialized.' },
     { timestamp: new Date().toLocaleTimeString(), step: 'BROWSER', level: 'info', message: 'Chromium / Playwright engine mounted on localhost:3000.' }
   ]);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   const stopSignalRef = useRef(false);
 
   const addLog = (step: string, level: 'info' | 'success' | 'warning' | 'error', message: string) => {
     setSystemLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), step, level, message }]);
+  };
+
+  // Load state from IndexedDB on mount
+  useEffect(() => {
+    const loadSavedState = async () => {
+      try {
+        const savedConfig = await dbGet<AutomatorConfig>('config');
+        if (savedConfig) setConfig(savedConfig);
+
+        const savedApps = await dbGet<ApplicantApplication[]>('applications');
+        if (savedApps) setApplications(savedApps);
+
+        const savedLogs = await dbGet<AutomationLog[]>('systemLogs');
+        if (savedLogs) setSystemLogs(savedLogs);
+      } catch (err) {
+        console.warn('Failed to load saved state from IndexedDB:', err);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    loadSavedState();
+  }, []);
+
+  // Save changes back to IndexedDB
+  useEffect(() => {
+    if (!isLoaded) return;
+    dbSet('config', config).catch(err => console.warn('Failed to save config:', err));
+  }, [config, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    dbSet('applications', applications).catch(err => console.warn('Failed to save applications:', err));
+  }, [applications, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    dbSet('systemLogs', systemLogs).catch(err => console.warn('Failed to save system logs:', err));
+  }, [systemLogs, isLoaded]);
+
+  // Clear all data
+  const handleClearAll = async () => {
+    setApplications([]);
+    setSystemLogs([
+      { timestamp: new Date().toLocaleTimeString(), step: 'SYSTEM', level: 'info', message: 'Queue and cached files cleared. Ready for a new batch.' }
+    ]);
+    try {
+      await dbClear();
+    } catch (err) {
+      console.warn('Failed to clear database:', err);
+    }
   };
 
   // Helper to sanitize folder name
@@ -324,6 +376,7 @@ export default function App() {
           onStartBatch={handleStartBatch}
           onStopBatch={handleStopBatch}
           onExportZip={handleExportZip}
+          onClearAll={handleClearAll}
           isProcessing={isProcessing}
           totalCount={applications.length}
           successCount={successCount}

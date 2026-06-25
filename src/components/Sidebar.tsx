@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AutomatorConfig } from '../types';
-import { FolderGit2, Mail, Bot, Play, Download, RefreshCw, StopCircle, CheckCircle2, FolderUp, FileUp } from 'lucide-react';
+import { FolderGit2, Mail, Bot, Play, Download, RefreshCw, StopCircle, CheckCircle2, FolderUp, FileUp, Trash2 } from 'lucide-react';
 import { DirectoryBrowserModal } from './DirectoryBrowserModal';
 
 interface SidebarProps {
@@ -11,6 +11,7 @@ interface SidebarProps {
   onStartBatch: () => void;
   onStopBatch: () => void;
   onExportZip: () => void;
+  onClearAll: () => void;
   isProcessing: boolean;
   totalCount: number;
   successCount: number;
@@ -25,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onStartBatch,
   onStopBatch,
   onExportZip,
+  onClearAll,
   isProcessing,
   totalCount,
   successCount,
@@ -32,6 +34,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const percent = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
   const [isBrowseModalOpen, setIsBrowseModalOpen] = useState(false);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
+
+  const handleClearClick = () => {
+    if (!showConfirmClear) {
+      setShowConfirmClear(true);
+      setTimeout(() => setShowConfirmClear(false), 3000);
+    } else {
+      onClearAll();
+      setShowConfirmClear(false);
+    }
+  };
 
   return (
     <aside className="w-80 border-r border-[#2D2D2D] bg-[#121315] p-5 flex flex-col gap-6 shrink-0 overflow-y-auto select-none">
@@ -169,6 +182,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Download className="w-3.5 h-3.5" />
             DOWNLOAD ALL AS ZIP ARCHIVE
+          </button>
+        )}
+
+        {hasApplications && (
+          <button
+            type="button"
+            onClick={handleClearClick}
+            disabled={isProcessing}
+            className={`w-full mt-2.5 border py-2.5 rounded transition-all text-xs font-medium flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 font-mono ${
+              showConfirmClear
+                ? 'bg-red-600/30 border-red-500 text-white animate-pulse'
+                : 'bg-[#1C1D1F] border-red-500/30 text-red-400 hover:bg-red-500/10'
+            }`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {showConfirmClear ? 'CONFIRM CLEAR ALL?' : 'RESET QUEUE & CLEAR CACHE'}
           </button>
         )}
       </section>
