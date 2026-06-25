@@ -59,6 +59,173 @@ function sanitizeFolderName(name: string, index: number): string {
   return `${padIndex}_${clean || 'Applicant'}`;
 }
 
+// Helper: Extract original URL from wrappers like Outlook Safelinks or Proofpoint Urldefense
+function unwrapUrl(urlStr: string): string {
+  if (!urlStr) return '';
+  let cleaned = urlStr.trim().replace(/&amp;/gi, '&');
+  
+  // Clean trailing punctuation first
+  cleaned = cleaned.replace(/[.,;><\)\]"]+$/, '');
+
+  try {
+    // Handle Safelinks
+    if (cleaned.toLowerCase().includes('safelinks.protection.outlook.com')) {
+      const url = new URL(cleaned);
+      const targetUrl = url.searchParams.get('url');
+      if (targetUrl) {
+        cleaned = targetUrl;
+      }
+    }
+    // Handle Proofpoint
+    if (cleaned.toLowerCase().includes('urldefense.proofpoint.com')) {
+      const url = new URL(cleaned);
+      const targetUrl = url.searchParams.get('u');
+      if (targetUrl) {
+        let u = targetUrl;
+        u = u.replace(/_/g, '/').replace(/--/g, '-');
+        if (u.startsWith('http-3A__')) u = u.replace('http-3A__', 'http://');
+        if (u.startsWith('https-3A__')) u = u.replace('https-3A__', 'https://');
+        cleaned = u;
+      }
+    }
+  } catch (err) {
+    // Ignore
+  }
+
+  // Final decode if it's percent-encoded
+  try {
+    if (cleaned.includes('%')) {
+      cleaned = decodeURIComponent(cleaned);
+    }
+  } catch (e) {}
+
+  return cleaned.trim();
+}
+
+// Clean and unwrap a candidate URL
+function cleanAndUnwrapUrl(urlStr: string): string {
+  if (!urlStr) return '';
+  
+  let cleaned = urlStr.trim();
+  
+  // Clean trailing punctuation and HTML entities/wrappers
+  cleaned = cleaned.replace(/&amp;/gi, '&');
+  cleaned = cleaned.replace(/[.,;><\)\]"\s']+$/, '');
+  
+  // Decode any percent-encoded characters (like %3D, %2F)
+  try {
+    if (cleaned.includes('%')) {
+      cleaned = decodeURIComponent(cleaned);
+    }
+  } catch (e) {}
+
+  cleaned = unwrapUrl(cleaned);
+  
+  // Unwrap again in case of nested wrappers
+  cleaned = unwrapUrl(cleaned);
+
+  // Clean trailing punctuation again on the unwrapped URL
+  cleaned = cleaned.replace(/[.,;><\)\]"\s']+$/, '');
+
+  return cleaned;
+}
+
+// Extract URLs from raw email text, supporting soft-wrapped and hard-wrapped line breaks
+function extractUrlsFromText(text: string): string[] {
+  const urls: string[] = [];
+  if (!text) return urls;
+  
+  // First, normalize soft line breaks with/without spaces
+  let normalized = text.replace(/=\s*\r?\n\s*/g, '');
+  
+  // Handle "=3D" which is a common quoted-printable artifact
+  normalized = normalized.replace(/=3D/gi, '=');
+
+  // Find all standard URLs
+  const regex = /https?:\/\/[^\s<)"]+/gi;
+  let match;
+  while ((match = regex.exec(normalized)) !== null) {
+    urls.push(match[0]);
+  }
+
+  // Also handle hard wrapping where a URL is split across lines WITHOUT an equals sign
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.includes('http://') || line.includes('https://')) {
+      const startIdx = line.indexOf('http');
+      let urlPart = line.slice(startIdx);
+      
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i+1].trim();
+        // A continuation has no spaces, does not start with http, and only has URL-safe characters
+        if (nextLine && !nextLine.includes(' ') && !nextLine.includes('http') && /^[a-zA-Z0-9_\-\.\?=\/&%#\+:]+$/.test(nextLine)) {
+          if (urlPart.endsWith('=')) {
+            urlPart = urlPart.slice(0, -1);
+          }
+          const reconstructed = urlPart + nextLine;
+          urls.push(reconstructed);
+        }
+      }
+    }
+  }
+
+  return urls;
+}
+
+// Extract URLs from email HTML part, including href and originalsrc attributes
+function extractUrlsFromHtml(html: string): string[] {
+  const urls: string[] = [];
+  if (!html) return urls;
+  
+  try {
+    const $ = cheerio.load(html);
+    $('a').each((_, el) => {
+      const href = $(el).attr('href');
+      if (href) urls.push(href);
+      
+      const originalSrc = $(el).attr('originalsrc');
+      if (originalSrc) urls.push(originalSrc);
+    });
+    
+    // Also extract text nodes in case plain URLs are written without anchor tags
+    const text = $.text();
+    const textUrls = extractUrlsFromText(text);
+    urls.push(...textUrls);
+  } catch (err) {
+    // Ignore cheerio error
+  }
+  
+  return urls;
+}
+
+// Select the absolute best candidate URL representing the CV portal download link
+function selectBestPortalUrl(urls: string[]): string {
+  const cleanedUrls = urls.map(u => cleanAndUnwrapUrl(u)).filter(Boolean);
+  
+  // Rank 1: documents.service.gov.uk portal links
+  const govLink = cleanedUrls.find(u => u.toLowerCase().includes('documents.service.gov.uk'));
+  if (govLink) return govLink;
+  
+  // Rank 2: mock-cv link
+  const mockLink = cleanedUrls.find(u => u.toLowerCase().includes('mock-cv'));
+  if (mockLink) return mockLink;
+
+  // Rank 3: any service.gov.uk link
+  const anyGov = cleanedUrls.find(u => u.toLowerCase().includes('service.gov.uk'));
+  if (anyGov) return anyGov;
+
+  // Rank 4: Return first non-generic URL
+  const genericDomains = ['microsoft.com', 'office365.com', 'outlook.com', 'google.com', 'gov.uk/government', 'static.notifications.service.gov.uk'];
+  const nonGeneric = cleanedUrls.find(u => {
+    const lower = u.toLowerCase();
+    return !genericDomains.some(domain => lower.includes(domain));
+  });
+  if (nonGeneric) return nonGeneric;
+
+  return cleanedUrls[0] || '';
+}
+
 // Minimal valid PDF Generator for realistic test portal downloads
 function createSamplePdfBuffer(applicantName: string, jobRef: string = 'JCP-88412'): Buffer {
   const content = `Job Centre Plus Verified CV\n\nApplicant Name: ${applicantName}\nReference: ${jobRef}\nDate: ${new Date().toLocaleDateString('en-GB')}\n\nExperience Summary:\n- Dedicated professional with strong background in operations and customer service.\n- Experienced in standard office software and collaborative workflows.\n- References available upon request from Job Centre Plus local branch.`;
@@ -142,10 +309,12 @@ app.post('/api/parse-email', async (req, res) => {
   // Try parsing .eml headers if it looks like standard MIME email
   let textToParse = rawText;
   let parsedSubject = '';
+  let emailHtml = '';
   if (rawText.includes('Subject:') || rawText.includes('Content-Type:') || rawText.includes('Received:') || rawText.includes('From:')) {
     try {
       const parsed = await simpleParser(rawText);
       if (parsed.text) textToParse = parsed.text;
+      if (parsed.html) emailHtml = typeof parsed.html === 'string' ? parsed.html : '';
       if (parsed.subject) parsedSubject = parsed.subject;
     } catch (e) {
       // Ignore parser error and use raw string
@@ -154,6 +323,12 @@ app.post('/api/parse-email', async (req, res) => {
 
   // Clean up any quoted-printable MIME artifacts (like =\r\n line wraps or =3D)
   const cleanedText = textToParse.replace(/=\r?\n/g, '').replace(/=3D/g, '=');
+
+  // Perform robust URL extraction
+  const textUrls = extractUrlsFromText(textToParse);
+  const htmlUrls = emailHtml ? extractUrlsFromHtml(emailHtml) : [];
+  const allCandidateUrls = [...textUrls, ...htmlUrls];
+  const selectedPortalUrl = selectBestPortalUrl(allCandidateUrls);
 
   // AI Parsing
   const ai = getAiClient();
@@ -194,7 +369,16 @@ ${cleanedText}`;
 
       if (aiRes && aiRes.text) {
         const data = JSON.parse(aiRes.text.trim());
-        const cleanedCvUrl = data.cvUrl ? String(data.cvUrl).replace(/[.,;>]+$/, '') : '';
+        let cleanedCvUrl = data.cvUrl ? String(data.cvUrl) : '';
+        cleanedCvUrl = cleanAndUnwrapUrl(cleanedCvUrl);
+
+        // Safeguard: ALWAYS prefer our highly robust, deterministic selectedPortalUrl if available
+        if (selectedPortalUrl) {
+          cleanedCvUrl = selectedPortalUrl;
+        } else if (!cleanedCvUrl) {
+          cleanedCvUrl = '';
+        }
+
         return res.json({
           applicantName: data.applicantName || 'Unknown Applicant',
           coverLetter: data.coverLetter || cleanedText.slice(0, 1000),
@@ -209,7 +393,6 @@ ${cleanedText}`;
   }
 
   // Fallback Regex Parser
-  const urlMatch = cleanedText.match(/https?:\/\/[^\s<)"]+/i);
   const nameMatch = cleanedText.match(/(?:Applicant Name|Applicant|Candidate|Name):\s*([^\r\n]+)/i);
   
   // Simple heuristic for cover letter: extract text between markers or body
@@ -219,12 +402,10 @@ ${cleanedText}`;
     coverLetter = letterMatch[1].trim();
   }
 
-  const cleanedFallbackUrl = urlMatch ? urlMatch[0].replace(/[.,;>]+$/, '') : '';
-
   res.json({
     applicantName: nameMatch ? nameMatch[1].trim() : 'Applicant',
     coverLetter: coverLetter.trim(),
-    cvUrl: cleanedFallbackUrl,
+    cvUrl: selectedPortalUrl,
     jobTitle: parsedSubject || 'Job Application',
     extractedViaAI: false
   });
@@ -284,8 +465,10 @@ function syncCookiesToDomain(jar: any, targetUrlStr: string) {
 
 // 3. Run Portal Automation (Multi-step sequential crawler: Landing -> Gate -> Download -> PDF)
 app.post('/api/run-automation', async (req, res) => {
-  const { appId, employerEmail, cvPortalUrl, applicantName } = req.body;
+  let { appId, employerEmail, cvPortalUrl, applicantName } = req.body;
   if (!cvPortalUrl) return res.status(400).json({ error: 'No CV Portal URL provided' });
+
+  cvPortalUrl = unwrapUrl(cvPortalUrl);
 
   const logs: { timestamp: string; step: string; level: 'info' | 'success' | 'warning' | 'error'; message: string }[] = [];
   const log = (step: string, level: 'info' | 'success' | 'warning' | 'error', message: string) => {

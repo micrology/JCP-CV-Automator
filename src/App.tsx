@@ -203,11 +203,12 @@ export default function App() {
     setApplications(prev => prev.map(item => item.id === app.id ? { ...item, status: 'parsing' } : item));
     addLog(`ID:${app.id.replace('app_', '')}`, 'info', `Processing application for ${app.applicantName}...`);
 
+    let applicantName = app.applicantName;
+    let coverLetterText = app.coverLetterText;
+    let cvPortalUrl = app.cvPortalUrl;
+
     try {
       // Step A: Parse email text
-      let applicantName = app.applicantName;
-      let coverLetterText = app.coverLetterText;
-      let cvPortalUrl = app.cvPortalUrl;
 
       const parseRes = await fetch('/api/parse-email', {
         method: 'POST',
@@ -280,7 +281,7 @@ export default function App() {
         status: 'error',
         statusMessage: err.message || 'Automation failed'
       } : item));
-      addLog(`ID:${app.id.replace('app_', '')}`, 'error', `✕ Failed ${app.applicantName}: ${err.message}`);
+      addLog(`ID:${app.id.replace('app_', '')}`, 'error', `✕ Failed ${applicantName}: ${err.message}`);
       return false;
     }
   };
