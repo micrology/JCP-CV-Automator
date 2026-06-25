@@ -1,0 +1,8 @@
+{
+  "name": "Job Centre Plus CV Automator",
+  "description": "Automated workflow tool to extract cover letters and download applicant PDF CVs from Job Centre Plus email notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
