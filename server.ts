@@ -19,15 +19,13 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Lazy AI Client Initialization
-let aiClient: GoogleGenAI | null = null;
-function getAiClient(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
-  }
-  return aiClient;
+function getAiClient(customApiKey?: string): GoogleGenAI | null {
+  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey: apiKey,
+    httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+  });
 }
 
 // In-memory application storage for session preview
@@ -303,7 +301,7 @@ app.get('/api/example-emails', (req, res) => {
 
 // 2. Parse Raw Email (Regex + AI fallback)
 app.post('/api/parse-email', async (req, res) => {
-  const { rawText, useAI = true } = req.body;
+  const { rawText, useAI = true, geminiApiKey } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Missing rawText parameter' });
 
   // Try parsing .eml headers if it looks like standard MIME email
@@ -331,7 +329,7 @@ app.post('/api/parse-email', async (req, res) => {
   const selectedPortalUrl = selectBestPortalUrl(allCandidateUrls);
 
   // AI Parsing
-  const ai = getAiClient();
+  const ai = getAiClient(geminiApiKey);
   if (useAI && ai) {
     try {
       const prompt = `You are an expert email parser helping an employer process job applications from "Job Centre Plus" or GOV.UK Notify.

@@ -34,6 +34,7 @@ export interface AutomatorConfig {
   batchDirectoryName: string;
   useGeminiAiParsing: boolean;
   requestDelayMs: number; // Polite delay between portal hits
+  geminiApiKey?: string;
 }
 
 export interface ParseEmailResponse {

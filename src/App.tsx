@@ -8,32 +8,13 @@ import { StatusBar } from './components/StatusBar';
 import { ApplicationDetailModal } from './components/ApplicationDetailModal';
 import { dbGet, dbSet, dbClear } from './lib/db';
 
-// 80 Realistic UK candidate names for Job Centre Plus notifications
-const JCP_CANDIDATE_POOL = [
-  'Arthur Pendelton', 'Clara Oswald', 'Marcus Vance', 'Priyanka Sharma', 'David Tennant',
-  'Sarah J. Miller', 'James Whittaker', 'Elena Rostova', 'Mark Thompson', 'Linda Greyson',
-  'Thomas Shelby', 'Anabelle Lee', 'Richard Dawkins', 'Florence Welch', 'Harrison Ford',
-  'Amira Patel', 'Benjamin Hughes', 'Chloe Bennett', 'Daniel Craig', 'Emily Blunt',
-  'Fiona Gallagher', 'George MacKay', 'Hannah Abbott', 'Ian McKellen', 'Jasmine Kaur',
-  'Kevin Bridges', 'Laura Carmichael', 'Michael Sheen', 'Nina Simone', 'Oliver Twist',
-  'Penelope Cruz', 'Quentin Blake', 'Rose Tyler', 'Simon Pegg', 'Tamsin Greig',
-  'Uma Thurman', 'Victor Hugo', 'Wendy Darling', 'Xavier Charles', 'Yusuf Islam',
-  'Zoe Wanamaker', 'Adam Peaty', 'Beatrice Webb', 'Callum Turner', 'Daisy Ridley',
-  'Edgar Wright', 'Freya Allan', 'Gareth Southgate', 'Hollie Doyle', 'Ivor Novello',
-  'Jude Law', 'Kiri Pritchard', 'Liam Gallagher', 'Miriam Margolyes', 'Ncuti Gatwa',
-  'Olivia Colman', 'Paddy Considine', 'Queen Latifah', 'Riz Ahmed', 'Saoirse Ronan',
-  'Tom Hiddleston', 'Ursula LeGuin', 'Vera Stanhope', 'Winston Churchill', 'Xena Warrior',
-  'Yolanda Adams', 'Zayn Malik', 'Alistair Brownlee', 'Bethany Shriever', 'Chris Hoy',
-  'Dina Asher-Smith', 'Eilish McColgan', 'Mo Farah', 'Geraint Thomas', 'Helen Glover',
-  'Idris Elba', 'Jessica Ennis', 'Katarina Johnson', 'Lando Norris', 'Max Whitlock'
-];
-
 export default function App() {
   const [config, setConfig] = useState<AutomatorConfig>({
-    employerEmail: 'nigel@cecan.co.uk',
+    employerEmail: '',
     batchDirectoryName: 'job_centre_applications_2026',
     useGeminiAiParsing: true,
-    requestDelayMs: 250
+    requestDelayMs: 250,
+    geminiApiKey: ''
   });
 
   const [applications, setApplications] = useState<ApplicantApplication[]>([]);
@@ -107,49 +88,7 @@ export default function App() {
     return `${String(index + 1).padStart(2, '0')}_${clean || 'Candidate'}`;
   };
 
-  // Load 80 Example Emails
-  const handleLoadExamples = async () => {
-    addLog('QUEUE', 'info', 'Loading Job Centre Plus applicant notification batch (80 emails)...');
-    try {
-      const res = await fetch('/api/example-emails');
-      const data = await res.json();
-      const baseSamples = data.samples || [];
 
-      const batch: ApplicantApplication[] = [];
-      const nowStr = new Date().toLocaleTimeString();
-
-      for (let i = 0; i < 80; i++) {
-        const sample = baseSamples[i % baseSamples.length];
-        const name = JCP_CANDIDATE_POOL[i] || `Candidate ${i + 1}`;
-        const refNum = `JCP-${88000 + i}`;
-        const portalUrl = `${window.location.origin}/api/portal/mock-cv/app_${101 + (i % 5)}`;
-
-        const rawContent = `Job Centre Plus Automated Notification\n\nBranch: High Street Central #412\nApplicant Name: ${name}\nVacancy Ref: ${refNum}\n\nCover Letter Submitted:\nDear Employer,\nI am writing to formally apply for the advertised role (Ref: ${refNum}). I have relevant customer support and office administration experience. I am reliable, punctual, and fully proficient in standard office software and records management.\nThank you for considering my application.\nYours sincerely,\n${name}\n\nSecure Candidate CV Portal Link:\n${portalUrl}\n\nNote: You will be required to verify registered employer email address before downloading CV.`;
-
-        batch.push({
-          id: `app_${String(i + 1).padStart(3, '0')}`,
-          applicantName: name,
-          jobTitle: `Vacancy Ref: ${refNum}`,
-          referenceNumber: refNum,
-          emailSubject: `Job Centre Plus Application: ${name} (${refNum})`,
-          rawEmailContent: rawContent,
-          coverLetterText: `Dear Employer,\nI am writing to formally apply for the advertised role (Ref: ${refNum}). I have relevant customer support and office administration experience. I am reliable, punctual, and fully proficient in standard office software and records management.\nThank you for considering my application.\nYours sincerely,\n${name}`,
-          cvPortalUrl: portalUrl,
-          extractedViaAI: false,
-          status: 'idle',
-          statusMessage: 'Ready to process',
-          logs: [],
-          folderName: getCleanFolderName(name, i),
-          createdAt: nowStr
-        });
-      }
-
-      setApplications(batch);
-      addLog('QUEUE', 'success', `Loaded exactly 80 candidate applications into processing queue.`);
-    } catch (err: any) {
-      addLog('QUEUE', 'error', `Failed to load example batch: ${err.message}`);
-    }
-  };
 
   // Upload local .eml directory or files
   const handleUploadFiles = async (fileList: FileList) => {
@@ -213,7 +152,11 @@ export default function App() {
       const parseRes = await fetch('/api/parse-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawText: app.rawEmailContent, useAI: config.useGeminiAiParsing })
+        body: JSON.stringify({
+          rawText: app.rawEmailContent,
+          useAI: config.useGeminiAiParsing,
+          geminiApiKey: config.geminiApiKey
+        })
       });
       const parseData = await parseRes.json();
 
@@ -372,7 +315,6 @@ export default function App() {
         <Sidebar
           config={config}
           onConfigChange={setConfig}
-          onLoadExamples={handleLoadExamples}
           onUploadFiles={handleUploadFiles}
           onStartBatch={handleStartBatch}
           onStopBatch={handleStopBatch}

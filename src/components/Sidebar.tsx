@@ -6,7 +6,6 @@ import { DirectoryBrowserModal } from './DirectoryBrowserModal';
 interface SidebarProps {
   config: AutomatorConfig;
   onConfigChange: (newConfig: AutomatorConfig) => void;
-  onLoadExamples: () => void;
   onUploadFiles: (files: FileList) => void;
   onStartBatch: () => void;
   onStopBatch: () => void;
@@ -21,7 +20,6 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   config,
   onConfigChange,
-  onLoadExamples,
   onUploadFiles,
   onStartBatch,
   onStopBatch,
@@ -61,10 +59,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="email"
               value={config.employerEmail}
               onChange={(e) => onConfigChange({ ...config, employerEmail: e.target.value })}
-              placeholder="e.g. nigel@cecan.co.uk"
+              placeholder="e.g. employer@company.com"
               className="w-full bg-[#1C1D1F] border border-[#333] rounded px-3 py-2 text-xs text-[#E0E0E0] focus:outline-none focus:border-blue-500 font-mono transition-colors"
             />
             <span className="text-[10px] text-[#666] mt-1 block">Entered into portal verification gates</span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-[#888] mb-1.5">Gemini API Key (Optional)</label>
+            <input
+              type="password"
+              value={config.geminiApiKey || ''}
+              onChange={(e) => onConfigChange({ ...config, geminiApiKey: e.target.value })}
+              placeholder="AI Studio API key (defaults to server key)"
+              className="w-full bg-[#1C1D1F] border border-[#333] rounded px-3 py-2 text-xs text-[#E0E0E0] focus:outline-none focus:border-blue-500 font-mono transition-colors"
+            />
+            <span className="text-[10px] text-[#666] mt-1 block">Used for parsing CVs via Gemini Flash</span>
           </div>
 
           <div>
@@ -146,14 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </label>
         </div>
 
-        <button
-          onClick={onLoadExamples}
-          disabled={isProcessing}
-          className="w-full bg-[#1A1B1E] border border-blue-500/50 text-blue-400 py-2.5 rounded hover:bg-blue-500/10 transition-colors text-xs font-medium mb-2.5 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 font-mono"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
-          LOAD JCP EXAMPLE EMAILS (80)
-        </button>
+
 
         {!isProcessing ? (
           <button
