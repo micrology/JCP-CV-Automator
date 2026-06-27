@@ -71,8 +71,7 @@ export const ApplicationTable: React.FC<ApplicationTableProps> = ({
             </div>
             <p className="text-sm font-medium text-[#AAA]">No applicant emails loaded in queue</p>
             <p className="text-xs text-[#888] mt-2 max-w-md leading-relaxed font-mono">
-              To load your actual <span className="text-purple-400 font-bold">.eml</span> directory from your computer, click <span className="text-purple-400 border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 rounded font-bold">LOAD FOLDER</span> or <span className="text-purple-400 border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 rounded font-bold">LOAD FILES</span> on the sidebar.<br /><br />
-              Or click <span className="text-blue-400 font-bold">LOAD JCP EXAMPLE EMAILS</span> to test with 80 simulated notifications.
+              To load your actual <span className="text-purple-400 font-bold">.eml</span> files or directories from your computer, click <span className="text-purple-400 border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 rounded font-bold">LOAD FOLDER</span> or <span className="text-purple-400 border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 rounded font-bold">LOAD FILES</span> on the sidebar.
             </p>
           </div>
         ) : (
